@@ -68,11 +68,17 @@ int main(int argc, char **argv) {
 
   /* Join threads, handle return values where appropriate */
 
-  result = pthread_join(producer_thread, NULL);
-  if (0 != result) {
-    fprintf(stderr, "Failed to join producer thread: %s\n", strerror(result));
-    pthread_exit(NULL);
-  }
+
+  /*
+   * BUG
+   * You can't try to join a detached thread
+   *
+   * result = pthread_join(producer_thread, NULL);
+   *  if (0 != result) {
+   *    fprintf(stderr, "Failed to join producer thread: %s\n", strerror(result));
+   *    pthread_exit(NULL);
+   * }
+   */
 
   result = pthread_join(consumer_thread, &thread_return);
   if (0 != result) {
