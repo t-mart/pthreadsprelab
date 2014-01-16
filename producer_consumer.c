@@ -151,7 +151,14 @@ void *producer_routine(void *arg) {
 void *consumer_routine(void *arg) {
   queue_t *queue_p = arg;
   queue_node_t *prev_node_p = NULL;
-  long count = 0; /* number of nodes this thread printed */
+  /* BUG
+   * if we want to pass count to pthread_join, it's got to be a pointer to heap
+   * memory, not stack/local memory.
+   *
+   * long count = 0; [> number of nodes this thread printed <]
+   */
+  long * count = malloc(sizeof(long)); /* number of nodes this thread printed */
+  *count = 0;
 
   printf("Consumer thread started with thread id %lu\n", pthread_self());
 
@@ -179,7 +186,12 @@ void *consumer_routine(void *arg) {
       /* Print the character, and increment the character count */
       printf("%c", prev_node_p->c);
       free(prev_node_p);
-      ++count;
+      /* BUG
+       * We're dealing with a pointer now, so dereference, then increment.
+       *
+       * ++count;
+       */
+      (*count)++;
     }
     else { /* Queue is empty, so let some other thread run */
       pthread_mutex_unlock(&queue_p->lock);
@@ -189,5 +201,10 @@ void *consumer_routine(void *arg) {
   pthread_mutex_unlock(&g_num_prod_lock);
   pthread_mutex_unlock(&queue_p->lock);
 
-  return (void*) count;
+  /* BUG
+   * don't cast to pointer, it IS a pointer.
+   *
+   * return (void*) count;
+   */
+  return count;
 }
