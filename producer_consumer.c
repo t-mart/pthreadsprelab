@@ -142,7 +142,13 @@ void *producer_routine(void *arg) {
   }
 
   /* Decrement the number of producer threads running, then return */
+  /* BUG
+   * We need to lock the respective mutex to prevent race conditions on this
+   * global variable.
+   */
+  pthread_mutex_lock(&g_num_prod_lock);
   --g_num_prod;
+  pthread_mutex_unlock(&g_num_prod_lock);
   return (void*) 0;
 }
 
