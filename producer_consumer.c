@@ -203,6 +203,19 @@ void *consumer_routine(void *arg) {
       pthread_mutex_unlock(&queue_p->lock);
       sched_yield();
     }
+  /* BUG
+   * The conditional of this while loop checks the global variable g_num_prod.
+   * Before we enter the loop, we lock the mutex for g_num_prod. After the
+   * condition is checked we unlock. If the condition passes again, we unlock
+   * again too, resulting in unlocking an already-unlocked mutex.
+   *
+   * This behavior is undefined, and we must lock again here at the end of the
+   * loop and also prevents race conditions in reading g_num_prod.
+   *
+   * This all also applies to queue_p->lock.
+   */
+  pthread_mutex_lock(&g_num_prod_lock);
+  pthread_mutex_lock(&queue_p->lock);
   }
   pthread_mutex_unlock(&g_num_prod_lock);
   pthread_mutex_unlock(&queue_p->lock);
