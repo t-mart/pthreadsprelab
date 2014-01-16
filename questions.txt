@@ -1,6 +1,7 @@
 Prelab Questions
 Tim Martin
 2014-1-16
+
 --------------------------------------------------------------------------------
 1. The main function contains calls to exit() (line 66) and pthread_exit()
 (line 80). How will the effect of these two calls differ when they are
@@ -17,28 +18,65 @@ thread_return. Where does the value stored in thread_return come from when the
 consumer_thread is joined? pthread_create()
 --------------------------------------------------------------------------------
 
-  That parameter will be assigned one of the following:
-    - The return value of the joining thread's function.
-    - The argument passed to pthread_exit() in the joining thread.
-    - The value PTHREAD_CANCELLED if the thread was cancelled.
+  That parameter will be assigned a pointer to one of the following:
+    - If the thread returns, the return value of the joining thread's function.
+    - If the thread calls pthread_exit, the argument passed to pthread_exit().
+    - If the thread is canceled, the value PTHREAD_CANCELLED.
+
+  In our code, the consumer thread is returning, so a printed letter count
+  pointer is given to the caller.
 
 --------------------------------------------------------------------------------
 3. Where does the value stored in thread_return come from if the joined thread
 terminated by calling pthread_exit instead of finishing normally?
 --------------------------------------------------------------------------------
+
+  See my previous answer for the values thread_return could take. As said,
+  joining a thread that has called pthread_exit() will pass the argument of
+  pthread_exit() to the caller.
+
 --------------------------------------------------------------------------------
 4. On the same call to pthread_join() (line 77), what will it do if the thread
 being joined (consumer_thread, in this case) finishes before the main thread
 reaches the that line of code (line 77)?
 --------------------------------------------------------------------------------
+
+  pthread_join() returns when the joining thread returns from it's function,
+  calls pthread_exit() or is canceled.
+
+  If the thread (consumer) has already returned when pthread_join() is called,
+  one of the conditions above has already been satisfied, so pthread_join
+  returns immediately and the program continues.
+
 --------------------------------------------------------------------------------
 5. In this program, the main thread calls pthread_join() on the threads it
 created. Could a different thread call pthread_join() on those threads instead?
 Could a thread call pthread_join() on the main thread (assuming it knew the
 main thread's thread ID - i.e.  pthread_t)?
 --------------------------------------------------------------------------------
+
+  Yes, non-main threads can join other non-main threads. However, programmers
+  must ensure they that there is always a "chain" of joins from the main
+  thread to any threads they want to complete -- otherwise, when main()
+  returns, those threads will be terminated immediately.
+
+  Attempting to join the main thread to another thread can work, but you have
+  to be careful. Namely, you can't let the main thread return. So, one of the
+  ways for pthread_join() to return is for the respective thread to return.
+  But for the main thread, when it returns, it runs an implicit exit(), which
+  is defined to terminate all threads and the join will never happen!
+
+  Instead, you must pthread_exit() in the main thread or pthread_cancel() the
+  main thread from another thread: This will advert main from returning and
+  the process will continue.
+
 --------------------------------------------------------------------------------
 6. The consumer_routine function calls sched_yield() (line 180) when there are
 no items in the queue. Why does it call sched_yield() instead of just
 continuing to check the queue for an item until one arrives?
 --------------------------------------------------------------------------------
+
+  The consumer_routine is being nice. As opposed to greedily taking processor
+  time to check the queue, sched_yield() "relinquishes the CPU", essentially
+  de-prioritizing it for scheduling. Ideally, this would allow other threads
+  to acquire resources that this thread may have unlocked more rapidly.
