@@ -29,6 +29,10 @@ void *consumer_routine(void *arg);
 long g_num_prod; /* number of producer threads */
 pthread_mutex_t g_num_prod_lock;
 
+/* long more; [> number of producer threads <] */
+/* pthread_mutex_t more_lock; */
+pthread_t consumer_thread2;
+
 
 /* Main - entry point */
 int main(int argc, char **argv) {
@@ -43,8 +47,16 @@ int main(int argc, char **argv) {
 
   memset(&queue, 0, sizeof(queue));
   pthread_mutex_init(&queue.lock, NULL);
+  /*
+   * ===========BUG===========
+   * Not necessarily a problem on THIS line, but SOMEWHERE, we need to
+   * initialize the g_num_prod_lock mutex. It wasn't being initialized before.
+   */
+  pthread_mutex_init(&g_num_prod_lock, NULL);
+  /* pthread_mutex_init(&more_lock, NULL); */
 
   g_num_prod = 1; /* there will be 1 producer thread */
+  /* more = 1; */
 
   /* Create producer and consumer threads */
 
@@ -56,9 +68,9 @@ int main(int argc, char **argv) {
 
   printf("Producer thread started with thread id %lu\n", producer_thread);
 
-  result = pthread_detach(producer_thread);
-  if (0 != result)
-    fprintf(stderr, "Failed to detach producer thread: %s\n", strerror(result));
+  /* result = pthread_detach(producer_thread); */
+  /* if (0 != result) */
+    /* fprintf(stderr, "Failed to detach producer thread: %s\n", strerror(result)); */
 
   result = pthread_create(&consumer_thread, NULL, consumer_routine, &queue);
   if (0 != result) {
@@ -70,8 +82,8 @@ int main(int argc, char **argv) {
 
 
   /*
-   * BUG
-   * You can't try to join a detached thread
+   * ===========BUG===========
+   * You can't try to join a detached thread. Removing this chunk.
    *
    * result = pthread_join(producer_thread, NULL);
    *  if (0 != result) {
@@ -80,7 +92,21 @@ int main(int argc, char **argv) {
    * }
    */
 
+  result = pthread_join(producer_thread, NULL);
+  if (0 != result) {
+    fprintf(stderr, "Failed to join consumer thread: %s\n", strerror(result));
+    pthread_exit(NULL);
+  }
+
   result = pthread_join(consumer_thread, &thread_return);
+  if (0 != result) {
+    fprintf(stderr, "Failed to join consumer thread: %s\n", strerror(result));
+    pthread_exit(NULL);
+  }
+  printf("\nPrinted %lu characters.\n", *(long*)thread_return);
+  free(thread_return);
+
+  result = pthread_join(consumer_thread2, &thread_return);
   if (0 != result) {
     fprintf(stderr, "Failed to join consumer thread: %s\n", strerror(result));
     pthread_exit(NULL);
@@ -103,16 +129,26 @@ void *producer_routine(void *arg) {
   pthread_t consumer_thread;
   int result = 0;
   char c;
+  void *thread_return = NULL;
 
-  result = pthread_create(&consumer_thread, NULL, consumer_routine, queue_p);
+  result = pthread_create(&consumer_thread2, NULL, consumer_routine, queue_p);
   if (0 != result) {
     fprintf(stderr, "Failed to create consumer thread: %s\n", strerror(result));
     exit(1);
   }
-
-  result = pthread_detach(consumer_thread);
-  if (0 != result)
-    fprintf(stderr, "Failed to detach consumer thread: %s\n", strerror(result));
+  /* ===========BUG===========
+   * You're creating a thread here which allocates memory on the heap. Then
+   * you're detaching it. That's not right. You need to join this thread back so
+   * you can free that memory. Also, this is a consumer, and it should probably
+   * be treated the same way the other consumer is. Without a join, there's no
+   * guarantee it can even run or return.
+   *
+   * Let's take out the detach here and then join at the end of this function.
+   *
+   * result = pthread_detach(consumer_thread2);
+   * if (0 != result)
+   * fprintf(stderr, "Failed to detach consumer thread: %s\n", strerror(result));
+   */
 
   for (c = 'a'; c <= 'z'; ++c) {
 
@@ -142,13 +178,14 @@ void *producer_routine(void *arg) {
   }
 
   /* Decrement the number of producer threads running, then return */
-  /* BUG
+  /* ===========BUG===========
    * We need to lock the respective mutex to prevent race conditions on this
    * global variable.
    */
   pthread_mutex_lock(&g_num_prod_lock);
   --g_num_prod;
   pthread_mutex_unlock(&g_num_prod_lock);
+
   return (void*) 0;
 }
 
@@ -157,7 +194,7 @@ void *producer_routine(void *arg) {
 void *consumer_routine(void *arg) {
   queue_t *queue_p = arg;
   queue_node_t *prev_node_p = NULL;
-  /* BUG
+  /* ===========BUG===========
    * if we want to pass count to pthread_join, it's got to be a pointer to heap
    * memory, not stack/local memory.
    *
@@ -167,6 +204,15 @@ void *consumer_routine(void *arg) {
   *count = 0;
 
   printf("Consumer thread started with thread id %lu\n", pthread_self());
+
+  /* pthread_mutex_lock(&more_lock); */
+  /* if (more == 1){ */
+	  /* more--; */
+	  /* pthread_mutex_unlock(&more_lock); */
+	  /* pthread_exit(count); */
+  /* } */
+  /* pthread_mutex_unlock(&more_lock); */
+
 
   /* terminate the loop only when there are no more items in the queue
    * AND the producer threads are all done */
@@ -192,18 +238,19 @@ void *consumer_routine(void *arg) {
       /* Print the character, and increment the character count */
       printf("%c", prev_node_p->c);
       free(prev_node_p);
-      /* BUG
+      /* ===========BUG===========
        * We're dealing with a pointer now, so dereference, then increment.
        *
        * ++count;
        */
       (*count)++;
+      sched_yield();
     }
     else { /* Queue is empty, so let some other thread run */
       pthread_mutex_unlock(&queue_p->lock);
       sched_yield();
     }
-  /* BUG
+  /* ===========BUG===========
    * The conditional of this while loop checks the global variable g_num_prod.
    * Before we enter the loop, we lock the mutex for g_num_prod. After the
    * condition is checked we unlock. If the condition passes again, we unlock
@@ -220,7 +267,7 @@ void *consumer_routine(void *arg) {
   pthread_mutex_unlock(&g_num_prod_lock);
   pthread_mutex_unlock(&queue_p->lock);
 
-  /* BUG
+  /* ===========BUG===========
    * don't cast to pointer, it IS a pointer.
    *
    * return (void*) count;
