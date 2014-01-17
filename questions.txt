@@ -9,8 +9,8 @@ executed?
 --------------------------------------------------------------------------------
 
   exit() terminates the entire process, including any threads it has created.
-  pthread_exit() terminates the calling thread only, and lets any other threads within
-  this process continue.
+  pthread_exit() terminates the calling thread only, and lets any other
+  threads within this process continue.
 
 --------------------------------------------------------------------------------
 2. The main function calls pthread_join() (line 77) with the parameter
@@ -55,10 +55,7 @@ Could a thread call pthread_join() on the main thread (assuming it knew the
 main thread's thread ID - i.e.  pthread_t)?
 --------------------------------------------------------------------------------
 
-  Yes, non-main threads can join other non-main threads. However, programmers
-  must ensure they that there is always a "chain" of joins from the main
-  thread to any threads they want to complete -- otherwise, when main()
-  returns, those threads will be terminated immediately.
+  Yes, non-main threads can join other non-main threads.
 
   Attempting to join the main thread to another thread can work, but you have
   to be careful. Namely, you can't let the main thread return. So, one of the
